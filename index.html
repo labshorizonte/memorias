@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#1b1535">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<title>Memória 100</title>
+<style>
+  :root {
+    --bg: #1b1535;
+    --panel: #2a2150;
+    --accent: #ffb84d;
+    --accent2: #7c5cff;
+    --ok: #4cd98a;
+    --bad: #ff5c7a;
+    --text: #f4f1ff;
+    --muted: #a99fd6;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+  .screen { position: absolute; inset: 0; display: none; flex-direction: column; padding: 14px; }
+  .screen.active { display: flex; }
+  button { font: inherit; color: inherit; border: 0; cursor: pointer; }
+  .btn { background: var(--accent2); padding: 14px 22px; border-radius: 14px; font-weight: 700; font-size: 18px;
+    box-shadow: 0 4px 0 rgba(0,0,0,.3); }
+  .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0,0,0,.3); }
+  .btn.gold { background: var(--accent); color: #2b1d00; }
+  .btn.ghost { background: var(--panel); }
+  .btn.small { padding: 8px 14px; font-size: 15px; border-radius: 10px; }
+
+  /* Home */
+  #home { align-items: center; justify-content: center; text-align: center; gap: 14px; }
+  #home h1 { font-size: 44px; margin: 0; letter-spacing: 1px; }
+  #home h1 span { color: var(--accent); }
+  #home p { color: var(--muted); margin: 0 0 12px; }
+  #home .btn { width: min(280px, 80vw); }
+  .logo { font-size: 64px; }
+
+  /* Levels */
+  #levels .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  #levels h2 { margin: 0; font-size: 22px; }
+  #levelGrid { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;
+    align-content: start; padding-bottom: 20px; }
+  .lv { background: var(--panel); border-radius: 12px; padding: 8px 0 6px; text-align: center; font-weight: 700; font-size: 18px; }
+  .lv small { display: block; font-size: 11px; color: var(--accent); min-height: 14px; letter-spacing: 1px; }
+  .lv.locked { opacity: .35; }
+  .lv.current { outline: 2px solid var(--accent); }
+
+  /* Game */
+  #hud { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .pill { background: var(--panel); border-radius: 999px; padding: 6px 12px; font-weight: 700; font-size: 15px; white-space: nowrap; }
+  .pill.warn { color: var(--bad); }
+  #boardWrap { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
+  #board { display: grid; gap: 8px; }
+  .card { perspective: 600px; cursor: pointer; }
+  .card .inner { position: relative; width: 100%; height: 100%; transition: transform .35s; transform-style: preserve-3d; }
+  .card.flipped .inner, .card.matched .inner { transform: rotateY(180deg); }
+  .face { position: absolute; inset: 0; border-radius: 12px; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    display: flex; align-items: center; justify-content: center; }
+  .face.back { background: linear-gradient(135deg, var(--accent2), #4b3aa8); font-size: 22px; color: rgba(255,255,255,.5); }
+  .face.front { background: #fff; transform: rotateY(180deg); }
+  .card.matched .face.front { background: #d6ffe8; }
+  .card.matched { animation: pop .4s; }
+  .card.shake .inner { animation: shake .35s; }
+  @keyframes pop { 50% { transform: scale(1.1); } }
+  @keyframes shake { 25% { transform: rotateY(180deg) translateX(-4px); } 75% { transform: rotateY(180deg) translateX(4px); } }
+  #hint { text-align: center; color: var(--muted); font-size: 14px; height: 20px; margin-top: 6px; }
+
+  /* Overlay */
+  #overlay { position: absolute; inset: 0; background: rgba(10,6,30,.82); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 5; }
+  #overlay.show { display: flex; }
+  .modal { background: var(--panel); border-radius: 22px; padding: 26px 22px; text-align: center; width: min(340px, 100%); }
+  .modal h2 { margin: 0 0 6px; font-size: 28px; }
+  .modal p { margin: 0 0 14px; color: var(--muted); }
+  .stars { font-size: 40px; letter-spacing: 6px; margin-bottom: 10px; }
+  .modal .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<!-- HOME -->
+<div id="home" class="screen active">
+  <div class="logo">🧠</div>
+  <h1>Memória <span>100</span></h1>
+  <p>Encontre os pares. Chegue ao nível 100!</p>
+  <button class="btn gold" id="btnPlay">▶ Jogar</button>
+  <button class="btn ghost" id="btnLevels">Escolher nível</button>
+  <button class="btn ghost small" id="btnSound">🔊 Som: ligado</button>
+</div>
+
+<!-- LEVELS -->
+<div id="levels" class="screen">
+  <div class="top">
+    <button class="btn ghost small" id="btnBackHome">← Voltar</button>
+    <h2>Níveis</h2>
+    <span style="width:70px"></span>
+  </div>
+  <div id="levelGrid"></div>
+</div>
+
+<!-- GAME -->
+<div id="game" class="screen">
+  <div id="hud">
+    <button class="btn ghost small" id="btnExit">✕</button>
+    <span class="pill" id="pLevel">Nível 1</span>
+    <span class="pill" id="pMiss">Erros: 0</span>
+    <span class="pill" id="pTime" style="display:none">⏱ 0</span>
+  </div>
+  <div id="boardWrap"><div id="board"></div></div>
+  <div id="hint"></div>
+</div>
+
+<div id="overlay"><div class="modal" id="modal"></div></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var MAX_LEVEL = 100;
+  var EMOJIS = ["🍎","🍌","🍇","🍓","🍒","🍍","🥝","🍉","🥕","🌽","🍄","🍕","🍔","🍩","🍪","🍰",
+    "🐶","🐱","🐼","🦊","🐸","🐵","🦁","🐯","🐙","🦋","🐢","🐧","🦄","🐝","🐳","🦉",
+    "⚽","🏀","🎲","🎸","🚀","🚗","⭐","🌙","🔥","💎","🎈","🎁"];
+
+  // ---------- Progresso salvo ----------
+  var save = { unlocked: 1, stars: {}, sound: true };
+  try {
+    var raw = localStorage.getItem("memoria100");
+    if (raw) { var p = JSON.parse(raw); if (p && p.unlocked) save = Object.assign(save, p); }
+  } catch (e) {}
+  function persist() { try { localStorage.setItem("memoria100", JSON.stringify(save)); } catch (e) {} }
+
+  // ---------- Configuração por nível ----------
+  function config(n) {
+    var pairs = 2 + Math.floor((n - 1) * 16 / 99);          // 2 a 18 pares
+    var cards = pairs * 2;
+    var cols = cards <= 4 ? 2 : cards <= 6 ? 3 : cards <= 12 ? 3 : cards <= 20 ? 4 : cards <= 30 ? 5 : 6;
+    if (cards === 8 || cards === 16) cols = 4;
+    var rows = Math.ceil(cards / cols);
+    var preview = Math.round(Math.max(900, 2600 - n * 15) + pairs * 40);
+    var maxMiss = n <= 10 ? Infinity : Math.max(pairs, Math.ceil(pairs * 1.6) - Math.floor((n - 10) / 8));
+    var time = n <= 30 ? 0 : Math.round(Math.max(pairs * 3, pairs * (7 - (n - 31) / 20)));
+    var mismatchDelay = n <= 60 ? 800 : n <= 85 ? 600 : 450;
+    return { pairs: pairs, cards: cards, cols: cols, rows: rows, preview: preview,
+             maxMiss: maxMiss, time: time, delay: mismatchDelay };
+  }
+
+  // ---------- Som ----------
+  var audioCtx = null;
+  function beep(freq, dur, type, vol) {
+    if (!save.sound) return;
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = type || "sine"; o.frequency.value = freq;
+      g.gain.value = vol || 0.15;
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(); o.stop(audioCtx.currentTime + dur);
+    } catch (e) {}
+  }
+  function vibrate(ms) { try { if (save.sound && navigator.vibrate) navigator.vibrate(ms); } catch (e) {} }
+  var sfx = {
+    flip: function () { beep(520, 0.08, "triangle"); },
+    match: function () { beep(660, 0.12, "sine"); setTimeout(function () { beep(880, 0.16, "sine"); }, 90); },
+    miss: function () { beep(200, 0.2, "sawtooth", 0.08); vibrate(60); },
+    win: function () { [523, 659, 784, 1046].forEach(function (f, i) { setTimeout(function () { beep(f, 0.2, "triangle"); }, i * 120); }); },
+    lose: function () { [330, 262, 196].forEach(function (f, i) { setTimeout(function () { beep(f, 0.25, "sawtooth", 0.08); }, i * 150); }); }
+  };
+
+  // ---------- Telas ----------
+  var $ = function (id) { return document.getElementById(id); };
+  function show(id) {
+    ["home", "levels", "game"].forEach(function (s) { $(s).classList.toggle("active", s === id); });
+  }
+  function updateSoundBtn() { $("btnSound").textContent = save.sound ? "🔊 Som: ligado" : "🔇 Som: desligado"; }
+
+  function buildLevels() {
+    var grid = $("levelGrid"); grid.innerHTML = "";
+    for (var n = 1; n <= MAX_LEVEL; n++) {
+      (function (n) {
+        var b = document.createElement("button");
+        var locked = n > save.unlocked;
+        b.className = "lv" + (locked ? " locked" : "") + (n === save.unlocked ? " current" : "");
+        var st = save.stars[n] || 0;
+        b.innerHTML = (locked ? "🔒" : n) + "<small>" + (locked ? "" : "★".repeat(st) + "☆".repeat(3 - st)) + "</small>";
+        if (!locked) b.addEventListener("click", function () { startLevel(n); });
+        grid.appendChild(b);
+      })(n);
+    }
+  }
+
+  // ---------- Jogo ----------
+  var G = null;
+
+  function shuffle(a) {
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  function startLevel(n) {
+    clearTimers();
+    var c = config(n);
+    G = { level: n, cfg: c, misses: 0, matched: 0, first: null, lock: true, over: false,
+          timeLeft: c.time, timerId: null, timeouts: [] };
+    var symbols = shuffle(EMOJIS.slice()).slice(0, c.pairs);
+    var deck = shuffle(symbols.concat(symbols));
+
+    $("pLevel").textContent = "Nível " + n;
+    updateMiss();
+    var pt = $("pTime");
+    pt.style.display = c.time ? "" : "none";
+    pt.classList.remove("warn");
+    pt.textContent = "⏱ " + c.time;
+    $("overlay").classList.remove("show");
+    $("hint").textContent = "Memorize as cartas!";
+    show("game");
+
+    var board = $("board"); board.innerHTML = "";
+    board.style.gridTemplateColumns = "repeat(" + c.cols + ", 1fr)";
+    deck.forEach(function (sym, i) {
+      var el = document.createElement("div");
+      el.className = "card";
+      el.innerHTML = '<div class="inner"><div class="face back">?</div><div class="face front"></div></div>';
+      el.querySelector(".front").textContent = sym;
+      el.dataset.sym = sym;
+      el.addEventListener("click", function () { onCard(el); });
+      board.appendChild(el);
+    });
+    layout();
+
+    var cardsEls = board.querySelectorAll(".card");
+    // prévia: mostra todas as cartas
+    later(function () { cardsEls.forEach(function (e) { e.classList.add("flipped"); }); }, 250);
+    later(function () {
+      cardsEls.forEach(function (e) { e.classList.remove("flipped"); });
+      G.lock = false;
+      $("hint").textContent = c.maxMiss === Infinity ? "Encontre todos os pares" : "Máximo de erros: " + c.maxMiss;
+      if (c.time) startTimer();
+    }, 250 + c.preview);
+  }
+
+  function later(fn, ms) { var id = setTimeout(fn, ms); if (G) G.timeouts.push(id); return id; }
+  function clearTimers() {
+    if (!G) return;
+    G.timeouts.forEach(clearTimeout);
+    if (G.timerId) clearInterval(G.timerId);
+    G.timeouts = []; G.timerId = null;
+  }
+
+  function startTimer() {
+    var end = Date.now() + G.cfg.time * 1000;
+    G.timerId = setInterval(function () {
+      if (G.over) return;
+      var left = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+      G.timeLeft = left;
+      $("pTime").textContent = "⏱ " + left;
+      $("pTime").classList.toggle("warn", left <= 10);
+      if (left <= 0) finish(false, "Tempo esgotado!");
+    }, 200);
+  }
+
+  function updateMiss() {
+    var m = G.cfg.maxMiss;
+    $("pMiss").textContent = "Erros: " + G.misses + (m === Infinity ? "" : "/" + m);
+  }
+
+  function onCard(el) {
+    if (!G || G.lock || G.over) return;
+    if (el.classList.contains("flipped") || el.classList.contains("matched")) return;
+    sfx.flip();
+    el.classList.add("flipped");
+    if (!G.first) { G.first = el; return; }
+    var a = G.first, b = el;
+    G.first = null;
+    if (a.dataset.sym === b.dataset.sym) {
+      G.matched++;
+      later(function () {
+        a.classList.add("matched"); b.classList.add("matched");
+        sfx.match(); vibrate(30);
+        if (G.matched === G.cfg.pairs) finish(true);
+      }, 250);
+    } else {
+      G.misses++; updateMiss();
+      G.lock = true;
+      a.classList.add("shake"); b.classList.add("shake");
+      sfx.miss();
+      later(function () {
+        a.classList.remove("flipped", "shake"); b.classList.remove("flipped", "shake");
+        G.lock = false;
+        if (G.misses >= G.cfg.maxMiss) finish(false, "Acabaram os erros!");
+      }, G.cfg.delay);
+    }
+  }
+
+  function calcStars() {
+    var m = G.cfg.maxMiss, p = G.cfg.pairs;
+    if (m === Infinity) return G.misses <= Math.ceil(p / 2) ? 3 : G.misses <= p ? 2 : 1;
+    return G.misses <= m * 0.4 ? 3 : G.misses <= m * 0.7 ? 2 : 1;
+  }
+
+  function finish(win, msg) {
+    if (G.over) return;
+    G.over = true; G.lock = true;
+    if (G.timerId) clearInterval(G.timerId);
+    var html = "";
+    if (win) {
+      var s = calcStars();
+      var n = G.level;
+      if (!save.stars[n] || s > save.stars[n]) save.stars[n] = s;
+      if (n < MAX_LEVEL && save.unlocked < n + 1) save.unlocked = n + 1;
+      persist();
+      sfx.win();
+      if (n === MAX_LEVEL) {
+        html = '<div class="stars">🏆</div><h2>Parabéns!</h2><p>Você zerou os 100 níveis!</p>' +
+               '<div class="row"><button class="btn gold" id="mLevels">Níveis</button></div>';
+      } else {
+        html = '<div class="stars">' + "⭐".repeat(s) + "☆".repeat(3 - s) + '</div><h2>Nível ' + n + ' completo!</h2>' +
+               '<p>Erros: ' + G.misses + '</p><div class="row">' +
+               '<button class="btn gold" id="mNext">Próximo ▶</button>' +
+               '<button class="btn ghost" id="mRetry">Repetir</button></div>';
+      }
+    } else {
+      sfx.lose();
+      html = '<div class="stars">💥</div><h2>' + msg + '</h2><p>Tente de novo, você consegue!</p>' +
+             '<div class="row"><button class="btn gold" id="mRetry">Tentar de novo</button>' +
+             '<button class="btn ghost" id="mLevels">Níveis</button></div>';
+    }
+    later(function () {
+      $("modal").innerHTML = html;
+      $("overlay").classList.add("show");
+      var nx = $("mNext"), rt = $("mRetry"), lv = $("mLevels");
+      if (nx) nx.addEventListener("click", function () { startLevel(G.level + 1); });
+      if (rt) rt.addEventListener("click", function () { startLevel(G.level); });
+      if (lv) lv.addEventListener("click", function () { clearTimers(); buildLevels(); show("levels"); $("overlay").classList.remove("show"); });
+    }, win ? 500 : 200);
+  }
+
+  // ---------- Layout do tabuleiro ----------
+  function layout() {
+    if (!G) return;
+    var wrap = $("boardWrap"), c = G.cfg, gap = 8;
+    var availW = wrap.clientWidth, availH = wrap.clientHeight;
+    var size = Math.floor(Math.min((availW - gap * (c.cols - 1)) / c.cols,
+                                   (availH - gap * (c.rows - 1)) / c.rows, 110));
+    size = Math.max(size, 30);
+    var board = $("board");
+    board.style.gridTemplateColumns = "repeat(" + c.cols + ", " + size + "px)";
+    board.style.gridAutoRows = size + "px";
+    board.querySelectorAll(".card").forEach(function (e) { e.style.width = size + "px"; e.style.height = size + "px"; });
+    board.querySelectorAll(".front").forEach(function (e) { e.style.fontSize = Math.floor(size * 0.55) + "px"; });
+  }
+  window.addEventListener("resize", layout);
+
+  // ---------- Botões ----------
+  $("btnPlay").addEventListener("click", function () { startLevel(Math.min(save.unlocked, MAX_LEVEL)); });
+  $("btnLevels").addEventListener("click", function () { buildLevels(); show("levels"); });
+  $("btnBackHome").addEventListener("click", function () { show("home"); });
+  $("btnExit").addEventListener("click", function () { clearTimers(); if (G) G.over = true; buildLevels(); show("levels"); });
+  $("btnSound").addEventListener("click", function () { save.sound = !save.sound; persist(); updateSoundBtn(); beep(600, 0.1); });
+
+  // evita zoom por toque duplo
+  document.addEventListener("dblclick", function (e) { e.preventDefault(); });
+
+  updateSoundBtn();
+  buildLevels();
+})();
+</script>
+<script>
+if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
+  window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+}
+</script>
+</body>
+</html>

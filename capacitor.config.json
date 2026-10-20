@@ -1,0 +1,9 @@
+{
+  "appId": "br.com.animeplayvideo.memoria100",
+  "appName": "Memória 100",
+  "webDir": "www",
+  "backgroundColor": "#1b1535",
+  "android": {
+    "allowMixedContent": false
+  }
+}
